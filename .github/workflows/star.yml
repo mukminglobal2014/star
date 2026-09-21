@@ -5,6 +5,9 @@ on:
     - cron: '*/5 * * * *'
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   run:
     runs-on: ubuntu-latest
@@ -12,6 +15,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - uses: actions/setup-python@v5
         with:
@@ -42,6 +47,9 @@ jobs:
           CREATE TABLE IF NOT EXISTS ledger (id INTEGER PRIMARY KEY AUTOINCREMENT, ts TEXT, agent TEXT, action TEXT, hash TEXT, prev TEXT);
           """)
           conn.commit()
+
+          mem_lama = conn.execute("SELECT COUNT(*) FROM memory").fetchone()[0]
+          print(f"Memory sedia ada: {mem_lama}")
 
           def ledger(agent, action):
               cur = conn.cursor()
@@ -93,13 +101,15 @@ jobs:
                   print(f"[{i+1}/{N}] {nama} FAIL: {str(e)[:100]}")
               time.sleep(2)
 
-          print(f"\n=== {ok}/{N} OK | {err} FAIL ===")
+          mem = conn.execute("SELECT COUNT(*) FROM memory").fetchone()[0]
+          print(f"\n=== {ok}/{N} OK | {err} FAIL | Total Memory: {mem} ===")
           PYEOF
           python star.py
 
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: star-db-${{ github.run_number }}
-          path: star.db
-          retention-days: 30
+      - name: Save DB ke repo (memory kekal)
+        run: |
+          git config user.name "swarm-bot"
+          git config user.email "bot@swarm.local"
+          git add star.db || true
+          git commit -m "swarm run $(date +%s)" || true
+          git push || true
